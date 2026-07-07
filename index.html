@@ -31,6 +31,24 @@
   .summary-label { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
   .summary-value { font-size: 15px; font-weight: 700; word-break: break-all; }
 
+  .cal-panel { background: #F5F8F2; border: 1px solid #C9DBC4; border-radius: 10px; padding: 12px 6px 14px; margin-bottom: 20px; }
+  .cal-head-row { display: flex; }
+  .cal-dow { flex: 1; text-align: center; font-size: 11px; font-weight: 700; color: #8A9986; padding-bottom: 6px; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .cal-cell { position: relative; min-height: 52px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 3px 1px; cursor: pointer; background: transparent; border: 1px solid transparent; }
+  .cal-cell.empty { cursor: default; }
+  .cal-cell.today { border-color: #B7CDB0; }
+  .cal-cell.selected { background: #233022; }
+  .cal-cell.selected .cal-daynum { color: #EDF2E9; }
+  .cal-cell.selected .cal-amt.in { color: #8FD4A8; }
+  .cal-cell.selected .cal-amt.ex { color: #E39B9B; }
+  .cal-daynum { font-size: 11px; font-weight: 600; color: #4A5B47; margin-bottom: 1px; }
+  .cal-amt { font-size: 8.5px; line-height: 1.25; font-weight: 700; }
+  .cal-amt.in { color: #2F855A; }
+  .cal-amt.ex { color: #B33F3F; }
+  .cal-reset { text-align: center; margin-top: 10px; }
+  .cal-reset button { background: none; border: none; color: #4A7FA5; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline; }
+
   .panel { background: #F5F8F2; border: 1px solid #C9DBC4; border-radius: 10px; margin-bottom: 24px; overflow: hidden; }
   .panel-title { padding: 12px 16px; font-size: 13px; font-weight: 700; color: #4A5B47; border-bottom: 1px solid #C9DBC4; }
   .cat-body { display: flex; align-items: center; gap: 16px; padding: 16px; }
@@ -98,6 +116,14 @@
     </div>
   </div>
 
+  <div class="cal-panel">
+    <div class="cal-head-row" id="calDow"></div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="cal-reset" id="calResetWrap" style="display:none;">
+      <button id="calReset">날짜 선택 해제</button>
+    </div>
+  </div>
+
   <div class="panel" id="catPanel" style="display:none;">
     <div class="panel-title">카테고리별 지출</div>
     <div class="cat-body">
@@ -134,6 +160,10 @@
     <label class="field-label">금액</label>
     <input type="number" inputmode="numeric" placeholder="0" class="field num" id="fAmount">
 
+    <label class="field-label">개월 수 (할부·분할 입력 시)</label>
+    <input type="number" inputmode="numeric" min="1" max="36" value="1" class="field num" id="fMonths">
+    <div style="font-size:11px; color:#8A9986; margin-top:4px;">1개월 초과 입력 시, 총액을 개월 수만큼 나눠 매달 같은 날짜에 자동으로 기록돼요.</div>
+
     <label class="field-label">메모 (선택)</label>
     <input type="text" placeholder="예: 점심 식사" class="field" id="fMemo">
 
@@ -145,19 +175,42 @@
 
 <script>
 const EXPENSE_CATS = [
-  { name: '식비', color: '#B33F3F' },
-  { name: '교통', color: '#C97C3D' },
-  { name: '주거/관리비', color: '#8B6BAE' },
-  { name: '통신', color: '#4A7FA5' },
+  { name: '식비(외식)', color: '#B33F3F' },
+  { name: '장보기/마트', color: '#C1573F' },
+  { name: '카페/간식', color: '#C97C3D' },
+  { name: '교통', color: '#B98A2E' },
+  { name: '자동차/유류비', color: '#A08B2A' },
+  { name: '주차/통행료', color: '#98942A' },
+  { name: '주거/월세', color: '#8B6BAE' },
+  { name: '관리비/공과금', color: '#6B7BAE' },
+  { name: '통신비', color: '#4A7FA5' },
+  { name: '보험료', color: '#3E7C8C' },
   { name: '의료/건강', color: '#3D8B6E' },
-  { name: '문화/여가', color: '#B08A3E' },
-  { name: '교육', color: '#5B6E8C' },
+  { name: '약국/의약품', color: '#469A73' },
+  { name: '문화/여가', color: '#4E9A5A' },
+  { name: '여행', color: '#6BA23D' },
+  { name: '쇼핑/의류', color: '#A98B3E' },
+  { name: '미용/뷰티', color: '#B45C82' },
+  { name: '교육/자기계발', color: '#5B6E8C' },
+  { name: '육아/자녀', color: '#7A6BAE' },
+  { name: '반려동물', color: '#8C5E3D' },
+  { name: '경조사/선물', color: '#B3703F' },
+  { name: '구독서비스', color: '#5A8CA0' },
+  { name: '할부/카드값', color: '#8C3D5A' },
+  { name: '대출상환', color: '#6E3D5A' },
+  { name: '세금/기타공과금', color: '#7A6E4E' },
   { name: '저축/투자', color: '#2F855A' },
   { name: '기타', color: '#7A7A6E' },
 ];
 const INCOME_CATS = [
   { name: '급여', color: '#2F855A' },
-  { name: '부수입', color: '#3D8B6E' },
+  { name: '사업소득', color: '#3D8B6E' },
+  { name: '부수입/프리랜스', color: '#4E9A5A' },
+  { name: '용돈', color: '#6BA23D' },
+  { name: '이자/배당', color: '#3E7C8C' },
+  { name: '임대소득', color: '#4A7FA5' },
+  { name: '상여금', color: '#2F8F6B' },
+  { name: '환급/캐시백', color: '#5A9E7A' },
   { name: '기타', color: '#7A7A6E' },
 ];
 
@@ -166,11 +219,25 @@ const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(
 const won = n => `${Math.round(n).toLocaleString('ko-KR')}원`;
 const STORE_KEY = 'speakinggym_ledger_transactions';
 
+function addMonthsToDateStr(dateStr, n) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const total = (m - 1) + n;
+  const newY = y + Math.floor(total / 12);
+  const newM = (total % 12) + 1;
+  const lastDay = new Date(newY, newM, 0).getDate();
+  const newD = Math.min(d, lastDay);
+  return `${newY}-${pad(newM)}-${pad(newD)}`;
+}
+
 let transactions = [];
 try { transactions = JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); } catch(e) { transactions = []; }
 
 let cursor = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth()+1 }; })();
 let formType = 'expense';
+let selectedDate = null;
+
+const DOW = ['일','월','화','수','목','금','토'];
+document.getElementById('calDow').innerHTML = DOW.map(d => `<div class="cal-dow">${d}</div>`).join('');
 
 function save() { localStorage.setItem(STORE_KEY, JSON.stringify(transactions)); }
 
@@ -185,21 +252,75 @@ function populateCategorySelect() {
   sel.innerHTML = cats.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
 }
 
+function formatShort(n) {
+  if (n >= 10000) {
+    const man = n / 10000;
+    return (Number.isInteger(man) ? man : man.toFixed(1)) + '만';
+  }
+  return n.toLocaleString('ko-KR');
+}
+
+function renderCalendar() {
+  const grid = document.getElementById('calGrid');
+  const firstDow = new Date(cursor.y, cursor.m - 1, 1).getDay();
+  const daysInMonth = new Date(cursor.y, cursor.m, 0).getDate();
+  const todayKey = todayStr();
+  const monthKey = `${cursor.y}-${pad(cursor.m)}`;
+
+  // per-day totals for this month
+  const dayTotals = {};
+  transactions.filter(t => t.date.startsWith(monthKey)).forEach(t => {
+    if (!dayTotals[t.date]) dayTotals[t.date] = { income: 0, expense: 0 };
+    if (t.type === 'income') dayTotals[t.date].income += t.amount;
+    else dayTotals[t.date].expense += t.amount;
+  });
+
+  let html = '';
+  for (let i = 0; i < firstDow; i++) html += `<div class="cal-cell empty"></div>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateKey = `${monthKey}-${pad(d)}`;
+    const cls = ['cal-cell'];
+    if (dateKey === todayKey) cls.push('today');
+    if (dateKey === selectedDate) cls.push('selected');
+    const tot = dayTotals[dateKey];
+    const amts = tot
+      ? `${tot.income > 0 ? `<div class="cal-amt in">+${formatShort(tot.income)}</div>` : ''}${tot.expense > 0 ? `<div class="cal-amt ex">-${formatShort(tot.expense)}</div>` : ''}`
+      : '';
+    html += `<div class="${cls.join(' ')}" data-date="${dateKey}">
+        <div class="cal-daynum">${d}</div>
+        ${amts}
+      </div>`;
+  }
+  grid.innerHTML = html;
+
+  grid.querySelectorAll('.cal-cell:not(.empty)').forEach(cell => {
+    cell.addEventListener('click', () => {
+      const dk = cell.dataset.date;
+      selectedDate = (selectedDate === dk) ? null : dk;
+      render();
+    });
+  });
+
+  document.getElementById('calResetWrap').style.display = selectedDate ? 'block' : 'none';
+}
+
 function render() {
   document.getElementById('monthLabel').textContent = `${cursor.y}년 ${cursor.m}월`;
-  const list = monthTx();
+  renderCalendar();
+  const monthList = monthTx();
+  const list = selectedDate ? monthList.filter(t => t.date === selectedDate) : monthList;
 
   let income = 0, expense = 0;
-  list.forEach(t => t.type === 'income' ? income += t.amount : expense += t.amount);
+  monthList.forEach(t => t.type === 'income' ? income += t.amount : expense += t.amount);
   const balance = income - expense;
 
   document.getElementById('sumIncome').textContent = won(income);
   document.getElementById('sumExpense').textContent = won(expense);
   document.getElementById('sumBalance').textContent = (balance < 0 ? '-' : '') + won(Math.abs(balance));
 
-  // category breakdown
+  // category breakdown (whole month, unaffected by day selection)
   const map = {};
-  list.filter(t => t.type === 'expense').forEach(t => { map[t.category] = (map[t.category]||0) + t.amount; });
+  monthList.filter(t => t.type === 'expense').forEach(t => { map[t.category] = (map[t.category]||0) + t.amount; });
   const catData = Object.entries(map).map(([name,value]) => ({
     name, value, color: (EXPENSE_CATS.find(c => c.name===name)||{}).color || '#7A7A6E'
   })).sort((a,b) => b.value - a.value);
@@ -224,10 +345,12 @@ function render() {
   }
 
   // transaction list
-  document.getElementById('txCount').textContent = `내역 (${list.length})`;
+  document.getElementById('txCount').textContent = selectedDate
+    ? `${selectedDate.slice(8,10)}일 내역 (${list.length})`
+    : `내역 (${list.length})`;
   const txList = document.getElementById('txList');
   if (list.length === 0) {
-    txList.innerHTML = `<div class="empty">이번 달 기록이 없어요. 아래 + 버튼으로 첫 내역을 추가해 보세요.</div>`;
+    txList.innerHTML = `<div class="empty">${selectedDate ? '이 날짜에 기록이 없어요.' : '이번 달 기록이 없어요. 아래 + 버튼으로 첫 내역을 추가해 보세요.'}</div>`;
   } else {
     txList.innerHTML = list.map(t => `
       <div class="tx-row row-line">
@@ -242,7 +365,17 @@ function render() {
     `).join('');
     txList.querySelectorAll('.tx-del').forEach(btn => {
       btn.addEventListener('click', () => {
-        transactions = transactions.filter(t => t.id !== btn.dataset.id);
+        const target = transactions.find(t => t.id === btn.dataset.id);
+        if (target && target.installmentGroup) {
+          const removeAll = confirm(`이 항목은 ${target.installmentTotal}회 할부/분할 중 ${target.installmentIndex}회차예요.\n\n확인: 나머지 회차 전부 삭제\n취소: 이 회차만 삭제`);
+          if (removeAll) {
+            transactions = transactions.filter(t => t.installmentGroup !== target.installmentGroup);
+          } else {
+            transactions = transactions.filter(t => t.id !== btn.dataset.id);
+          }
+        } else {
+          transactions = transactions.filter(t => t.id !== btn.dataset.id);
+        }
         save(); render();
       });
     });
@@ -257,17 +390,24 @@ function escapeHtml(str) {
 
 document.getElementById('prevMonth').addEventListener('click', () => {
   cursor.m -= 1; if (cursor.m < 1) { cursor.m = 12; cursor.y -= 1; }
+  selectedDate = null;
   render();
 });
 document.getElementById('nextMonth').addEventListener('click', () => {
   cursor.m += 1; if (cursor.m > 12) { cursor.m = 1; cursor.y += 1; }
+  selectedDate = null;
+  render();
+});
+document.getElementById('calReset').addEventListener('click', () => {
+  selectedDate = null;
   render();
 });
 
 const overlay = document.getElementById('overlay');
 document.getElementById('openForm').addEventListener('click', () => {
-  document.getElementById('fDate').value = todayStr();
+  document.getElementById('fDate').value = selectedDate || todayStr();
   document.getElementById('fAmount').value = '';
+  document.getElementById('fMonths').value = '1';
   document.getElementById('fMemo').value = '';
   document.getElementById('fError').style.display = 'none';
   overlay.classList.add('open');
@@ -288,13 +428,30 @@ document.getElementById('saveBtn').addEventListener('click', () => {
   const date = document.getElementById('fDate').value;
   const category = document.getElementById('fCategory').value;
   const amount = Number(document.getElementById('fAmount').value);
+  const months = Math.max(1, Math.min(36, Number(document.getElementById('fMonths').value) || 1));
   const memo = document.getElementById('fMemo').value.trim();
   const errEl = document.getElementById('fError');
 
   if (!date) { errEl.textContent = '날짜를 입력해 주세요.'; errEl.style.display = 'block'; return; }
   if (!amount || amount <= 0) { errEl.textContent = '금액을 올바르게 입력해 주세요.'; errEl.style.display = 'block'; return; }
 
-  transactions.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2), date, type: formType, category, amount, memo });
+  if (months <= 1) {
+    transactions.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2), date, type: formType, category, amount, memo });
+  } else {
+    const groupId = Date.now().toString(36) + Math.random().toString(36).slice(2);
+    const base = Math.floor(amount / months);
+    const remainder = amount - base * (months - 1);
+    for (let i = 0; i < months; i++) {
+      const entryAmount = (i === months - 1) ? remainder : base;
+      const entryDate = addMonthsToDateStr(date, i);
+      const entryMemo = memo ? `${memo} (${i+1}/${months}회)` : `${i+1}/${months}회`;
+      transactions.push({
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2) + i,
+        date: entryDate, type: formType, category, amount: entryAmount, memo: entryMemo,
+        installmentGroup: groupId, installmentIndex: i + 1, installmentTotal: months,
+      });
+    }
+  }
   save();
   overlay.classList.remove('open');
   render();
